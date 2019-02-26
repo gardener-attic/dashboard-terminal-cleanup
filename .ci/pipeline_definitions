@@ -16,6 +16,9 @@ dashboard-terminal-cleanup:
             registry: 'gcr-readwrite'
             image: 'eu.gcr.io/gardener-project/gardener/dashboard-terminal-cleanup'
   variants:
+    head-update:
+      traits:
+        draft_release: ~
     release:
       traits:
         version:
