@@ -1,0 +1,29 @@
+dashboard-terminal-cleanup:
+  template: 'default'
+  base_definition:
+    repo: ~
+    traits:
+      version:
+        preprocess:
+          'inject-commit-hash'
+        inject_effective_version: true
+      publish:
+        dockerimages:
+          dashboard-terminal-cleanup:
+            inputs:
+              repos:
+                source: ~ # default
+            registry: 'gcr-readwrite'
+            image: 'eu.gcr.io/gardener-project/gardener/dashboard-terminal-cleanup'
+  variants:
+    release:
+      traits:
+        version:
+          preprocess: 'finalize'
+        release:
+          nextversion: 'bump_minor'
+        component_descriptor: ~
+        publish:
+          dockerimages:
+            dashboard-terminal-cleanup:
+              tag_as_latest: true
