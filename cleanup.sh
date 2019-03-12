@@ -15,34 +15,46 @@
 # limitations under the License.
 #
 
+delete_expired_serviceaccounts () {
+  TYPE=$1
+  echo "Looking for expired dashboard terminal serviceaccounts of type ${TYPE}.."
+
+  SERVICEACCOUNTS="$(kubectl get serviceaccounts --selector=component=dashboard-terminal,saType=${TYPE} --all-namespaces -ojson)"
+  SERVICEACCOUNTS_COUNT="$(echo ${SERVICEACCOUNTS} | jq .items | jq length)"
+
+  echo "Found ${SERVICEACCOUNTS_COUNT} dashboard terminal service accounts of type ${TYPE}"
+  COUNT=0
+  while [ "${COUNT}" -lt "${SERVICEACCOUNTS_COUNT}" ]
+  do
+    SERVICEACCOUNT="$(echo ${SERVICEACCOUNTS} | jq .items[${COUNT}])"
+    SA_NAME="$(echo ${SERVICEACCOUNT} | jq -r .metadata.name)"
+    SA_NAMESPACE="$(echo ${SERVICEACCOUNT} | jq -r .metadata.namespace)"
+    SA_HEARTBEAT="$(echo ${SERVICEACCOUNT} | jq -r .metadata.annotations[\"garden.sapcloud.io/terminal-heartbeat\"])"
+
+    if [ ! -z "${SA_NAME}" ] && [ ! -z "${SA_NAMESPACE}" ]; then
+
+      let SA_SECS_WO_HEARTBEAT="${CURRENT_TIMESTAMP}-${SA_HEARTBEAT}"
+      echo "Checking serviceaccount ${SA_NAMESPACE}/${SA_NAME}: ${SA_SECS_WO_HEARTBEAT}s since last heartbeat"
+
+      if [ "${SA_SECS_WO_HEARTBEAT}" -gt "${THRESHOLD}" ]; then
+        echo "Did not receive heartbeat signal within ${THRESHOLD} seconds. Deleting serviceaccount ${SA_NAMESPACE}/${SA_NAME}"
+        kubectl delete serviceaccount ${SA_NAME} -n ${SA_NAMESPACE}
+      fi
+    fi
+    COUNT=$((${COUNT}+1))
+  done
+}
+
 THRESHOLD=${NO_HEARTBEAT_DELETE_SECONDS:-86400}
 CURRENT_TIMESTAMP="$(date +%s)"
-KUBE_TOKEN="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
 
-echo "Looking for expired dashboard terminal serviceaccounts.."
 echo "Configured max lifetime without heartbeat: ${THRESHOLD}s"
 
-SERVICEACCOUNTS="$(curl -sS --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt -H "Authorization: Bearer $KUBE_TOKEN" -H "Accept: application/json" https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_PORT_443_TCP_PORT}/api/v1/serviceaccounts?labelSelector=component%3Ddashboard-terminal%2Csatype%3Dattach -XGET)"
-SERVICEACCOUNTS_COUNT="$(echo ${SERVICEACCOUNTS} | jq .items | jq length)"
-
-echo "Found ${SERVICEACCOUNTS_COUNT} dashboard terminal service accounts"
-COUNT=0
-while [ "${COUNT}" -lt "${SERVICEACCOUNTS_COUNT}" ]
-do
-  SERVICEACCOUNT="$(echo ${SERVICEACCOUNTS} | jq .items[${COUNT}])"
-  SA_NAME="$(echo ${SERVICEACCOUNT} | jq -r .metadata.name)"
-  SA_NAMESPACE="$(echo ${SERVICEACCOUNT} | jq -r .metadata.namespace)"
-  SA_HEARTBEAT="$(echo ${SERVICEACCOUNT} | jq -r .metadata.annotations[\"garden.sapcloud.io/terminal-heartbeat\"])"
-
-  if [ ! -z "${SA_NAME}" ] && [ ! -z "${SA_NAMESPACE}" ]; then
-
-    let SA_SECS_WO_HEARTBEAT="${CURRENT_TIMESTAMP}-${SA_HEARTBEAT}"
-    echo "Checking serviceaccount ${SA_NAMESPACE}/${SA_NAME}: ${SA_SECS_WO_HEARTBEAT}s since last heartbeat"
-
-    if [ "${SA_SECS_WO_HEARTBEAT}" -gt "${THRESHOLD}" ]; then
-      echo "Did not receive heartbeat signal within ${THRESHOLD} seconds. Deleting serviceaccount ${SA_NAMESPACE}/${SA_NAME}"
-      curl -sS --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt -H "Authorization: Bearer ${KUBE_TOKEN}" https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_PORT_443_TCP_PORT}/api/v1/namespaces/${SA_NAMESPACE}/serviceaccounts/${SA_NAME} -XDELETE
-    fi
-  fi
-  COUNT=$((${COUNT}+1))
-done
+if [ -e /config/attach/config ]; then
+  export KUBECONFIG=/config/attach/config
+  delete_expired_serviceaccounts attach
+fi
+if [ -e /config/access/config ]; then
+  export KUBECONFIG=/config/access/config
+  delete_expired_serviceaccounts access
+fi
