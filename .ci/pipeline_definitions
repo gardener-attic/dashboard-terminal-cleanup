@@ -15,7 +15,7 @@ dashboard-terminal-cleanup:
                 source: ~ # default
             registry: 'gcr-readwrite'
             image: 'eu.gcr.io/gardener-project/gardener/dashboard-terminal-cleanup'
-  variants:
+  jobs:
     head-update:
       traits:
         draft_release: ~
