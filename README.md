@@ -1,4 +1,4 @@
-# dashboard-terminal-cleanup
+# dashboard-terminal-cleanup [DEPRECATED]
 
 This Docker 🐳Image is used by the [gardener/dashboard](https://github.com/gardener/dashboard) component to clean up service accounts created for the web terminal feature.
 
